@@ -113,6 +113,29 @@ def parse_schedule():
     
     return schedule_data
 
+def load_existing_events(ics_path):
+    if not os.path.exists(ics_path):
+        return []
+    
+    with open(ics_path, "r", encoding="utf-8") as f:
+        ics_data = f.read()
+    
+    existing_cal = Calendar(ics_data)
+    return list(existing_cal.events)
+
+def filter_past_events(events, timezone):
+    now = datetime.now(timezone)
+    past_events = []
+    future_events = []
+    
+    for event in events:
+        if event.end.datetime < now:
+            past_events.append(event)
+        else:
+            future_events.append(event)
+    
+    return past_events, future_events
+
 def create_ics(schedule, path="schedule.ics"):
     cal = Calendar()
 
@@ -127,6 +150,12 @@ def create_ics(schedule, path="schedule.ics"):
 
     timezone = pytz.timezone('Europe/Moscow')
 
+    existing_events = load_existing_events(path)
+    past_events, _ = filter_past_events(existing_events, timezone)
+
+    for event in past_events:
+        cal.events.add(event)
+
     for lesson in schedule:
         event = Event()
 
@@ -140,7 +169,7 @@ def create_ics(schedule, path="schedule.ics"):
         
         event.location = lesson['Room']
 
-        description = f"Пара №{lesson['Number']}\nПреподаватель: {lesson['Teacher']}\nВид занятия: {lesson['Type']}"
+        description = f"Пара №{lesson['Number']}\nДисциплина: {lesson['Subject']}\nПреподаватель: {lesson['Teacher']}\nВид занятия: {lesson['Type']}"
         if lesson['Link'] != "-":
             description += f"\nСсылка: {lesson['Link']}"
         event.description = description
@@ -159,7 +188,8 @@ def create_ics(schedule, path="schedule.ics"):
             alarm = DisplayAlarm(trigger=timedelta(minutes=-30))
             event.alarms.append(alarm)
 
-        cal.events.add(event)
+        if event.begin.datetime > datetime.now(timezone):
+            cal.events.add(event)
     
     with open(path, "w", encoding="utf-8") as f:
         f.write(cal.serialize())
