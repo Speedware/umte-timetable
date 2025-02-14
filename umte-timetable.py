@@ -13,7 +13,10 @@ from ics.alarm import DisplayAlarm
 import pytz
 import os
 import tempfile
-from config import username, password
+import caldav
+from caldav.elements import dav
+from concurrent.futures import ThreadPoolExecutor
+from config import username, password, icloud_username, icloud_password
 
 options = Options()
 options.add_argument("--headless")
@@ -159,7 +162,54 @@ def create_ics(schedule, path="schedule.ics"):
         cal.events.add(event)
     
     with open(path, "w", encoding="utf-8") as f:
-        f.write(str(cal))
+        f.write(cal.serialize())
+
+def upload_to_icloud(ics_path):
+    icloud_url = "https://caldav.icloud.com"
+    calendar_name = "UMTE calDAV"
+
+    client = caldav.DAVClient(url=icloud_url, username=icloud_username, password=icloud_password)
+    principal = client.principal()
+
+    try:
+        calendar = principal.calendar(name=calendar_name)
+    except caldav.lib.error.NotFoundError:
+        print(f"Календарь '{calendar_name}' не найден. Создаем новый календарь...")
+        calendar = principal.make_calendar(name=calendar_name)
+        print(f"Календарь '{calendar_name}' успешно создан.")
+
+    print("Очистка календаря от старых событий...")
+
+    events = list(calendar.events())
+
+    def delete_event(event):
+        try:
+            event.delete()
+            print(f"Событие удалено: {event.instance.vevent.summary.value}")
+        except Exception as e:
+            print(f"Ошибка при удалении события: {e}")
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        executor.map(delete_event, events)
+
+    print("Календарь очищен.")
+
+    with open(ics_path, "r", encoding="utf-8") as f:
+        ics_data = f.read()
+
+    from ics import Calendar as IcsCalendar
+    ics_calendar = IcsCalendar(ics_data)
+
+    def add_event(event):
+        try:
+            event_ics = event.serialize()
+            calendar.add_event(event_ics)
+            print(f"Событие '{event.name}' успешно добавлено.")
+        except Exception as e:
+            print(f"Ошибка при добавлении события '{event.name}': {e}")
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        executor.map(add_event, ics_calendar.events)
 
 login()
 schedule = parse_schedule()
@@ -180,5 +230,6 @@ else:
         print("-" * 30)
 
     create_ics(schedule)
+    upload_to_icloud("schedule.ics")
 
 driver.quit()
