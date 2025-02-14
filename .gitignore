@@ -1,0 +1,12 @@
+docker-compose.yml
+Dockerfile.nginx
+Dockerfile.python
+
+nginx.conf
+
+config.py
+
+__pycache__/config.cpython-312.pyc
+schedule.ics
+
+.DS_Store
