@@ -129,7 +129,7 @@ def filter_past_events(events, timezone):
     future_events = []
     
     for event in events:
-        if event.end.datetime < now:
+        if event.end.datetime.date() < now.date():
             past_events.append(event)
         else:
             future_events.append(event)
@@ -188,7 +188,7 @@ def create_ics(schedule, path="schedule.ics"):
             alarm = DisplayAlarm(trigger=timedelta(minutes=-30))
             event.alarms.append(alarm)
 
-        if event.begin.datetime > datetime.now(timezone):
+        if event.begin.datetime.date() >= datetime.now(timezone).date():
             cal.events.add(event)
     
     with open(path, "w", encoding="utf-8") as f:
